@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Propagação WiFi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            padding: 20px;
+            border-right: 2px solid #e9ecef;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .panel h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+
+        .tool-btn {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .tool-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .tool-btn.active {
+            ring: 3px solid #3498db;
+        }
+
+        .btn-draw { background: #3498db; color: white; }
+        .btn-wall { background: #e74c3c; color: white; }
+        .btn-circle { background: #9b59b6; color: white; }
+        .btn-door { background: #e67e22; color: white; }
+        .btn-pallet { background: #d35400; color: white; }
+        .btn-ap { background: #2ecc71; color: white; }
+        .btn-clear { background: #95a5a6; color: white; }
+        .btn-simulate { background: #f39c12; color: white; }
+
+        .material-select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+
+        .canvas-container {
+            position: relative;
+            background: #ecf0f1;
+            overflow: hidden;
+        }
+
+        #mainCanvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 12px;
+            background: #1abc9c;
+            color: white;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            background: #16a085;
+        }
+
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .stats {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📡 Simulador de Propagação WiFi</h1>
+            <p>Visualize como as ondas de rádio se propagam em diferentes ambientes</p>
+        </header>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="panel">
+                    <h3>🛠️ Ferramentas</h3>
+                    <button class="tool-btn btn-draw" onclick="setTool('draw')">✏️ Desenhar Parede</button>
+                    <button class="tool-btn btn-circle" onclick="setTool('circle')">⭕ Desenhar Círculo</button>
+                    <button class="tool-btn btn-door" onclick="setTool('door')">🚪 Porta</button>
+                    <button class="tool-btn btn-pallet" onclick="setTool('pallet')">📦 Porta Paletes</button>
+                    <button class="tool-btn btn-ap" onclick="setTool('ap')">📶 Ponto de Acesso</button>
+                    <button class="tool-btn btn-clear" onclick="clearCanvas()">🗑️ Limpar Tudo</button>
+                    <button class="tool-btn btn-simulate" onclick="toggleSimulation()">▶️ Simular</button>
+                </div>
+
+                <div class="panel">
+                    <h3>🧱 Materiais</h3>
+                    <select id="materialSelect" class="material-select" onchange="updateMaterial()">
+                        <option value="drywall">Drywall (Gesso)</option>
+                        <option value="concrete">Concreto</option>
+                        <option value="brick">Tijolo</option>
+                        <option value="glass">Vidro</option>
+                        <option value="wood">Madeira</option>
+                        <option value="metal">Metal</option>
+                        <option value="plasterboard">Pladur</option>
+                    </select>
+                    
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #e74c3c;"></div>
+                            <span>Drywall</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #c0392b;"></div>
+                            <span>Concreto</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #d35400;"></div>
+                            <span>Tijolo</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #3498db; opacity: 0.6;"></div>
+                            <span>Vidro</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #8e44ad;"></div>
+                            <span>Madeira</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #2c3e50;"></div>
+                            <span>Metal</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #e67e22;"></div>
+                            <span>Porta</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #d35400; background-image: linear-gradient(90deg, #d35400 50%, #a04000 50%); background-size: 10px 100%;"></div>
+                            <span>Porta Paletes</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>📁 Arquivo</h3>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label">
+                            📤 Carregar Imagem
+                            <input type="file" id="imageLoader" accept="image/*" onchange="loadImage(event)">
+                        </label>
+                    </div>
+                    <div class="file-input-wrapper" style="margin-top: 10px;">
+                        <label class="file-input-label">
+                            💾 Salvar Projeto
+                            <input type="file" id="projectLoader" accept=".json" onchange="loadProject(event)">
+                        </label>
+                    </div>
+                    <button class="tool-btn" style="background: #16a085; color: white; margin-top: 10px;" onclick="saveProject()">💿 Exportar Projeto</button>
+                </div>
+
+                <div class="panel">
+                    <h3>ℹ️ Informações</h3>
+                    <div class="info-box">
+                        <strong>Como usar:</strong><br>
+                        1. Carregue uma imagem ou desenhe paredes<br>
+                        2. Selecione o material de cada objeto<br>
+                        3. Adicione pontos de acesso WiFi<br>
+                        4. Clique em "Simular" para ver a propagação
+                    </div>
+                    
+                    <div class="stats" id="stats">
+                        <div class="stat-item">
+                            <span>Paredes:</span>
+                            <span id="wallCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>Pontos de Acesso:</span>
+                            <span id="apCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>Frequência:</span>
+                            <span>2.4 GHz</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="mainCanvas" width="1000" height="700"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let currentTool = null;
+        let isDrawing = false;
+        let startX, startY;
+        let walls = [];
+        let circles = [];
+        let doors = [];
+        let pallets = [];
+        let accessPoints = [];
+        let backgroundImage = null;
+        let isSimulating = false;
+        let simulationData = null;
+
+        const materials = {
+            drywall: { color: '#e74c3c', attenuation: 0.3, name: 'Drywall' },
+            concrete: { color: '#c0392b', attenuation: 0.8, name: 'Concreto' },
+            brick: { color: '#d35400', attenuation: 0.5, name: 'Tijolo' },
+            glass: { color: 'rgba(52, 152, 219, 0.6)', attenuation: 0.2, name: 'Vidro' },
+            wood: { color: '#8e44ad', attenuation: 0.4, name: 'Madeira' },
+            metal: { color: '#2c3e50', attenuation: 0.95, name: 'Metal' },
+            plasterboard: { color: '#e74c3c', attenuation: 0.35, name: 'Pladur' },
+            door: { color: '#e67e22', attenuation: 0.1, name: 'Porta' },
+            pallet: { color: '#d35400', attenuation: 0.25, name: 'Porta Paletes' }
+        };
+
+        let currentMaterial = 'drywall';
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function updateMaterial() {
+            currentMaterial = document.getElementById('materialSelect').value;
+        }
+
+        function clearCanvas() {
+            walls = [];
+            circles = [];
+            doors = [];
+            pallets = [];
+            accessPoints = [];
+            backgroundImage = null;
+            simulationData = null;
+            isSimulating = false;
+            draw();
+            updateStats();
+        }
+
+        function loadImage(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    backgroundImage = img;
+                    draw();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(event.target.files[0]);
+        }
+
+        function loadProject(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const project = JSON.parse(e.target.result);
+                walls = project.walls || [];
+                circles = project.circles || [];
+                doors = project.doors || [];
+                pallets = project.pallets || [];
+                accessPoints = project.accessPoints || [];
+                draw();
+                updateStats();
+            };
+            reader.readAsText(event.target.files[0]);
+        }
+
+        function saveProject() {
+            const project = {
+                walls,
+                circles,
+                doors,
+                pallets,
+                accessPoints,
+                savedAt: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(project, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'projeto-wifi.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function toggleSimulation() {
+            if (accessPoints.length === 0) {
+                alert('Adicione pelo menos um ponto de acesso!');
+                return;
+            }
+            isSimulating = !isSimulating;
+            if (isSimulating) {
+                calculatePropagation();
+            } else {
+                simulationData = null;
+            }
+            draw();
+        }
+
+        function calculatePropagation() {
+            const width = canvas.width;
+            const height = canvas.height;
+            const resolution = 5;
+            
+            simulationData = new Float32Array((width / resolution) * (height / resolution));
+            
+            for (let y = 0; y < height; y += resolution) {
+                for (let x = 0; x < width; x += resolution) {
+                    let signalStrength = 0;
+                    
+                    accessPoints.forEach(ap => {
+                        const distance = Math.sqrt(Math.pow(x - ap.x, 2) + Math.pow(y - ap.y, 2));
+                        
+                        // Free space path loss
+                        let strength = 100 / (1 + distance * 0.02);
+                        
+                        // Check wall intersections
+                        walls.forEach(wall => {
+                            if (lineIntersectsLine(x, y, ap.x, ap.y, wall.x1, wall.y1, wall.x2, wall.y2)) {
+                                const material = materials[wall.material];
+                                strength *= (1 - material.attenuation);
+                            }
+                        });
+                        
+                        // Check door intersections
+                        doors.forEach(door => {
+                            if (lineIntersectsLine(x, y, ap.x, ap.y, door.x1, door.y1, door.x2, door.y2)) {
+                                const material = materials.door;
+                                strength *= (1 - material.attenuation);
+                            }
+                        });
+                        
+                        // Check pallet intersections
+                        pallets.forEach(pallet => {
+                            if (x >= pallet.x && x <= pallet.x + pallet.width && 
+                                y >= pallet.y && y <= pallet.y + pallet.height) {
+                                const material = materials.pallet;
+                                strength *= (1 - material.attenuation * 0.5);
+                            }
+                        });
+                        
+                        // Check circle intersections
+                        circles.forEach(circle => {
+                            const distToCenter = Math.sqrt(Math.pow(x - circle.cx, 2) + Math.pow(y - circle.cy, 2));
+                            if (distToCenter <= circle.radius) {
+                                const material = materials[circle.material];
+                                strength *= (1 - material.attenuation * 0.5);
+                            }
+                        });
+                        
+                        signalStrength = Math.max(signalStrength, strength);
+                    });
+                    
+                    const index = Math.floor(y / resolution) * (width / resolution) + Math.floor(x / resolution);
+                    simulationData[index] = signalStrength;
+                }
+            }
+        }
+
+        function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+            const denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+            if (denom === 0) return false;
+            
+            const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom;
+            const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom;
+            
+            return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background image
+            if (backgroundImage) {
+                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+            }
+            
+            // Draw simulation overlay
+            if (isSimulating && simulationData) {
+                const resolution = 5;
+                for (let y = 0; y < canvas.height; y += resolution) {
+                    for (let x = 0; x < canvas.width; x += resolution) {
+                        const index = Math.floor(y / resolution) * (canvas.width / resolution) + Math.floor(x / resolution);
+                        const strength = simulationData[index];
+                        
+                        if (strength > 0) {
+                            const hue = 120 * (strength / 100);
+                            ctx.fillStyle = `hsla(${hue}, 80%, 50%, 0.4)`;
+                            ctx.fillRect(x, y, resolution, resolution);
+                        }
+                    }
+                }
+            }
+            
+            // Draw walls
+            walls.forEach(wall => {
+                ctx.beginPath();
+                ctx.moveTo(wall.x1, wall.y1);
+                ctx.lineTo(wall.x2, wall.y2);
+                ctx.strokeStyle = materials[wall.material].color;
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+                
+                // Draw material label
+                const midX = (wall.x1 + wall.x2) / 2;
+                const midY = (wall.y1 + wall.y2) / 2;
+                ctx.fillStyle = 'white';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(materials[wall.material].name.substring(0, 3), midX, midY - 5);
+            });
+            
+            // Draw circles
+            circles.forEach(circle => {
+                ctx.beginPath();
+                ctx.arc(circle.cx, circle.cy, circle.radius, 0, Math.PI * 2);
+                ctx.fillStyle = materials[circle.material].color;
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+            
+            // Draw doors
+            doors.forEach(door => {
+                ctx.beginPath();
+                ctx.moveTo(door.x1, door.y1);
+                ctx.lineTo(door.x2, door.y2);
+                ctx.strokeStyle = materials.door.color;
+                ctx.lineWidth = 6;
+                ctx.lineCap = 'round';
+                ctx.setLineDash([5, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Draw door label
+                const midX = (door.x1 + door.x2) / 2;
+                const midY = (door.y1 + door.y2) / 2;
+                ctx.fillStyle = '#e67e22';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('🚪', midX, midY - 5);
+            });
+            
+            // Draw pallets
+            pallets.forEach(pallet => {
+                ctx.fillStyle = materials.pallet.color;
+                ctx.fillRect(pallet.x, pallet.y, pallet.width, pallet.height);
+                ctx.strokeStyle = '#a04000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(pallet.x, pallet.y, pallet.width, pallet.height);
+                
+                // Draw pallet pattern
+                ctx.fillStyle = '#a04000';
+                const stripeWidth = Math.min(pallet.width, pallet.height) / 4;
+                for (let i = 0; i < pallet.width; i += stripeWidth * 2) {
+                    ctx.fillRect(pallet.x + i, pallet.y, stripeWidth, pallet.height);
+                }
+                
+                // Draw label
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('📦', pallet.x + pallet.width/2, pallet.y + pallet.height/2 + 3);
+            });
+            
+            // Draw access points
+            accessPoints.forEach(ap => {
+                // Signal waves
+                if (isSimulating) {
+                    for (let i = 1; i <= 3; i++) {
+                        ctx.beginPath();
+                        ctx.arc(ap.x, ap.y, i * 30, 0, Math.PI * 2);
+                        ctx.strokeStyle = `rgba(52, 152, 219, ${0.3 - i * 0.08})`;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                }
+                
+                // AP icon
+                ctx.beginPath();
+                ctx.arc(ap.x, ap.y, 15, 0, Math.PI * 2);
+                ctx.fillStyle = '#2ecc71';
+                ctx.fill();
+                ctx.strokeStyle = '#27ae60';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Antenna
+                ctx.beginPath();
+                ctx.moveTo(ap.x, ap.y - 15);
+                ctx.lineTo(ap.x, ap.y - 25);
+                ctx.strokeStyle = '#27ae60';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(ap.x, ap.y - 25, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#27ae60';
+                ctx.fill();
+            });
+            
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('wallCount').textContent = walls.length + circles.length + doors.length + pallets.length;
+            document.getElementById('apCount').textContent = accessPoints.length;
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isDrawing = true;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing || !currentTool) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            draw();
+            
+            // Preview drawing
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            
+            if (currentTool === 'draw') {
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            } else if (currentTool === 'circle') {
+                const radius = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
+                ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (currentTool === 'door') {
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            } else if (currentTool === 'pallet') {
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
+                ctx.rect(Math.min(startX, currentX), Math.min(startY, currentY), width, height);
+                ctx.stroke();
+            }
+            
+            ctx.setLineDash([]);
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (!isDrawing || !currentTool) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            
+            if (currentTool === 'draw') {
+                if (Math.abs(endX - startX) > 10 || Math.abs(endY - startY) > 10) {
+                    walls.push({
+                        x1: startX,
+                        y1: startY,
+                        x2: endX,
+                        y2: endY,
+                        material: currentMaterial
+                    });
+                }
+            } else if (currentTool === 'circle') {
+                const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                if (radius > 10) {
+                    circles.push({
+                        cx: startX,
+                        cy: startY,
+                        radius: radius,
+                        material: currentMaterial
+                    });
+                }
+            } else if (currentTool === 'door') {
+                if (Math.abs(endX - startX) > 10 || Math.abs(endY - startY) > 10) {
+                    doors.push({
+                        x1: startX,
+                        y1: startY,
+                        x2: endX,
+                        y2: endY,
+                        material: 'door'
+                    });
+                }
+            } else if (currentTool === 'pallet') {
+                const width = Math.abs(endX - startX);
+                const height = Math.abs(endY - startY);
+                if (width > 10 && height > 10) {
+                    pallets.push({
+                        x: Math.min(startX, endX),
+                        y: Math.min(startY, endY),
+                        width: width,
+                        height: height,
+                        material: 'pallet'
+                    });
+                }
+            } else if (currentTool === 'ap') {
+                accessPoints.push({
+                    x: startX,
+                    y: startY
+                });
+            }
+            
+            isDrawing = false;
+            draw();
+        });
+
+        // Initial draw
+        draw();
+    </script>
+</body>
+</html>
