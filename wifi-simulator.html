@@ -103,6 +103,7 @@
         .btn-door { background: #e67e22; color: white; }
         .btn-pallet { background: #d35400; color: white; }
         .btn-ap { background: #2ecc71; color: white; }
+        .btn-eraser { background: #e74c3c; color: white; }
         .btn-clear { background: #95a5a6; color: white; }
         .btn-simulate { background: #f39c12; color: white; }
 
@@ -216,6 +217,7 @@
                     <button class="tool-btn btn-door" onclick="setTool('door')">🚪 Porta</button>
                     <button class="tool-btn btn-pallet" onclick="setTool('pallet')">📦 Porta Paletes</button>
                     <button class="tool-btn btn-ap" onclick="setTool('ap')">📶 Ponto de Acesso</button>
+                    <button class="tool-btn btn-eraser" onclick="setTool('eraser')">🧽 Borracha</button>
                     <button class="tool-btn btn-clear" onclick="clearCanvas()">🗑️ Limpar Tudo</button>
                     <button class="tool-btn btn-simulate" onclick="toggleSimulation()">▶️ Simular</button>
                 </div>
@@ -278,11 +280,11 @@
                     </div>
                     <div class="file-input-wrapper" style="margin-top: 10px;">
                         <label class="file-input-label">
-                            💾 Salvar Projeto
+                            📂 Carregar Projeto
                             <input type="file" id="projectLoader" accept=".json" onchange="loadProject(event)">
                         </label>
                     </div>
-                    <button class="tool-btn" style="background: #16a085; color: white; margin-top: 10px;" onclick="saveProject()">💿 Exportar Projeto</button>
+                    <button class="tool-btn" style="background: #16a085; color: white; margin-top: 10px;" onclick="saveProject()">💾 Salvar Projeto</button>
                 </div>
 
                 <div class="panel">
@@ -334,6 +336,12 @@
         let isSimulating = false;
         let simulationData = null;
 
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
         const materials = {
             drywall: { color: '#e74c3c', attenuation: 0.3, name: 'Drywall' },
             concrete: { color: '#c0392b', attenuation: 0.8, name: 'Concreto' },
@@ -347,12 +355,6 @@
         };
 
         let currentMaterial = 'drywall';
-
-        function setTool(tool) {
-            currentTool = tool;
-            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-        }
 
         function updateMaterial() {
             currentMaterial = document.getElementById('materialSelect').value;
@@ -682,6 +684,14 @@
                 const height = Math.abs(currentY - startY);
                 ctx.rect(Math.min(startX, currentX), Math.min(startY, currentY), width, height);
                 ctx.stroke();
+            } else if (currentTool === 'eraser') {
+                // Show eraser preview circle
+                ctx.beginPath();
+                ctx.arc(currentX, currentY, 20, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(231, 76, 60, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
             }
             
             ctx.setLineDash([]);
@@ -741,9 +751,81 @@
                     x: startX,
                     y: startY
                 });
+            } else if (currentTool === 'eraser') {
+                isDrawing = false;
+                draw();
+                return;
             }
             
             isDrawing = false;
+            draw();
+        });
+
+        function pointToLineDistance(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            
+            if (lenSq !== 0) {
+                param = dot / lenSq;
+            }
+
+            let xx, yy;
+
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+
+            const dx = px - xx;
+            const dy = py - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (currentTool !== 'eraser') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const clickRadius = 20;
+            
+            walls = walls.filter(wall => {
+                const dist = pointToLineDistance(clickX, clickY, wall.x1, wall.y1, wall.x2, wall.y2);
+                return dist > clickRadius;
+            });
+            
+            circles = circles.filter(circle => {
+                const dist = Math.sqrt(Math.pow(clickX - circle.cx, 2) + Math.pow(clickY - circle.cy, 2));
+                return dist > circle.radius + clickRadius;
+            });
+            
+            doors = doors.filter(door => {
+                const dist = pointToLineDistance(clickX, clickY, door.x1, door.y1, door.x2, door.y2);
+                return dist > clickRadius;
+            });
+            
+            pallets = pallets.filter(pallet => {
+                return !(clickX >= pallet.x && clickX <= pallet.x + pallet.width &&
+                         clickY >= pallet.y && clickY <= pallet.y + pallet.height);
+            });
+            
+            accessPoints = accessPoints.filter(ap => {
+                const dist = Math.sqrt(Math.pow(clickX - ap.x, 2) + Math.pow(clickY - ap.y, 2));
+                return dist > clickRadius;
+            });
+            
             draw();
         });
 
