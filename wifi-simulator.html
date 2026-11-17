@@ -216,7 +216,8 @@
                     <button class="tool-btn btn-circle" onclick="setTool('circle')">⭕ Desenhar Círculo</button>
                     <button class="tool-btn btn-door" onclick="setTool('door')">🚪 Porta</button>
                     <button class="tool-btn btn-pallet" onclick="setTool('pallet')">📦 Porta Paletes</button>
-                    <button class="tool-btn btn-ap" onclick="setTool('ap')">📶 Ponto de Acesso</button>
+                    <button class="tool-btn btn-ap" onclick="setTool('ap')">📡 AP Omnidirecional</button>
+                    <button class="tool-btn btn-ap" style="background:#2980b9; color:white;" onclick="setTool('ap-directional')">📶 AP Direcional</button>
                     <button class="tool-btn btn-eraser" onclick="setTool('eraser')">🧽 Borracha</button>
                     <button class="tool-btn btn-clear" onclick="clearCanvas()">🗑️ Limpar Tudo</button>
                     <button class="tool-btn btn-simulate" onclick="toggleSimulation()">▶️ Simular</button>
@@ -288,6 +289,26 @@
                 </div>
 
                 <div class="panel">
+                    <h3>📻 Frequência</h3>
+                    <button id="freqBtn" class="tool-btn" style="background:#16a085; color:white;" onclick="toggleFrequency()">📶 2.4 GHz (clique p/ 5 GHz)</button>
+                </div>
+
+                <div class="panel">
+                    <h3>🎨 Legenda de Sinal</h3>
+                    <div style="height:18px; border-radius:4px; background: linear-gradient(to right, hsl(0,80%,50%), hsl(40,80%,50%), hsl(80,80%,50%), hsl(120,80%,50%));"></div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-top:4px;">
+                        <span>Sem sinal</span><span>Fraco</span><span>Médio</span><span>Forte</span>
+                    </div>
+                    <div class="legend" style="margin-top:8px;">
+                        <div class="legend-item"><div class="legend-color" style="background: hsl(120,80%,50%);"></div><span>Excelente (-50 dBm ou melhor)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background: hsl(90,80%,50%);"></div><span>Bom (-60 dBm)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background: hsl(60,80%,50%);"></div><span>Razoável (-70 dBm)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background: hsl(30,80%,50%);"></div><span>Fraco (-80 dBm)</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background: hsl(0,80%,50%);"></div><span>Inutilizável (-90 dBm ou pior)</span></div>
+                    </div>
+                </div>
+
+                <div class="panel">
                     <h3>ℹ️ Informações</h3>
                     <div class="info-box">
                         <strong>Como usar:</strong><br>
@@ -308,7 +329,7 @@
                         </div>
                         <div class="stat-item">
                             <span>Frequência:</span>
-                            <span>2.4 GHz</span>
+                            <span id="freqDisplay">2.4 GHz</span>
                         </div>
                     </div>
                 </div>
@@ -335,6 +356,22 @@
         let backgroundImage = null;
         let isSimulating = false;
         let simulationData = null;
+        let currentFrequency = 2.4; // GHz
+
+function toggleFrequency() {
+            setFrequency(currentFrequency === 2.4 ? 5.0 : 2.4);
+            if (isSimulating) calculatePropagation();
+            draw();
+        }
+
+        function setFrequency(freq) {
+            currentFrequency = freq;
+            const btn = document.getElementById('freqBtn');
+            btn.textContent = freq === 2.4
+                ? '📶 2.4 GHz (clique p/ 5 GHz)'
+                : '📶 5.0 GHz (clique p/ 2.4 GHz)';
+            document.getElementById('freqDisplay').textContent = freq.toFixed(1) + ' GHz';
+        }
 
         function setTool(tool) {
             currentTool = tool;
@@ -395,6 +432,8 @@
                 doors = project.doors || [];
                 pallets = project.pallets || [];
                 accessPoints = project.accessPoints || [];
+                setFrequency(project.frequency === 5 ? 5.0 : 2.4);
+                if (isSimulating) calculatePropagation();
                 draw();
                 updateStats();
             };
@@ -408,6 +447,7 @@
                 doors,
                 pallets,
                 accessPoints,
+                frequency: currentFrequency,
                 savedAt: new Date().toISOString()
             };
             const blob = new Blob([JSON.stringify(project, null, 2)], {type: 'application/json'});
@@ -444,17 +484,41 @@
                 for (let x = 0; x < width; x += resolution) {
                     let signalStrength = 0;
                     
-                    accessPoints.forEach(ap => {
-                        const distance = Math.sqrt(Math.pow(x - ap.x, 2) + Math.pow(y - ap.y, 2));
-                        
+                                        accessPoints.forEach(ap => {
+                        const ddx = x - ap.x;
+                        const ddy = y - ap.y;
+                        const distance = Math.sqrt(ddx * ddx + ddy * ddy);
+
+                        // Perda por espaco livre depende da frequencia:
+                        // 5 GHz tem ~6 dB a mais de perda que 2.4 GHz
+                        const freqFactor = currentFrequency === 2.4 ? 1.0 : 0.63;
+
                         // Free space path loss
-                        let strength = 100 / (1 + distance * 0.02);
+                        let strength = (100 / (1 + distance * 0.02)) * freqFactor;
+
+                        // Diagrama de radiation para APs direcionais (feixe ~70 graus)
+                        if (ap.type === 'directional') {
+                            const angleToPoint = Math.atan2(ddy, ddx);
+                            let diff = angleToPoint - ap.direction;
+                            while (diff > Math.PI) diff -= 2 * Math.PI;
+                            while (diff < -Math.PI) diff += 2 * Math.PI;
+                            const halfBeam = (35 * Math.PI) / 180;
+                            const absDiff = Math.abs(diff);
+                            if (absDiff <= halfBeam) {
+                                strength *= 1.35; // ganho no lobo principal
+                            } else if (absDiff > Math.PI * 0.75) {
+                                strength *= 0.15; // lobo traseiro muito fraco
+                            } else {
+                                const falloff = Math.max(0, 1 - (absDiff - halfBeam) / (Math.PI - halfBeam));
+                                strength *= 0.15 + 0.7 * falloff;
+                            }
+                        }
                         
                         // Check wall intersections
                         walls.forEach(wall => {
                             if (lineIntersectsLine(x, y, ap.x, ap.y, wall.x1, wall.y1, wall.x2, wall.y2)) {
                                 const material = materials[wall.material];
-                                strength *= (1 - material.attenuation);
+                                strength *= (1 - Math.min(0.98, material.attenuation * (currentFrequency === 2.4 ? 1 : 1.2)));
                             }
                         });
                         
@@ -603,38 +667,57 @@
             
             // Draw access points
             accessPoints.forEach(ap => {
+                const isDir = ap.type === 'directional';
+                const halfBeam = (35 * Math.PI) / 180;
+
+                // Beam cone preview for directional APs
+                if (isDir) {
+                    ctx.beginPath();
+                    ctx.moveTo(ap.x, ap.y);
+                    ctx.arc(ap.x, ap.y, 120, ap.direction - halfBeam, ap.direction + halfBeam);
+                    ctx.closePath();
+                    ctx.fillStyle = 'rgba(41, 128, 185, 0.15)';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(41, 128, 185, 0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+
                 // Signal waves
                 if (isSimulating) {
                     for (let i = 1; i <= 3; i++) {
                         ctx.beginPath();
-                        ctx.arc(ap.x, ap.y, i * 30, 0, Math.PI * 2);
+                        if (isDir) {
+                            ctx.arc(ap.x, ap.y, i * 30, ap.direction - halfBeam, ap.direction + halfBeam);
+                        } else {
+                            ctx.arc(ap.x, ap.y, i * 30, 0, Math.PI * 2);
+                        }
                         ctx.strokeStyle = `rgba(52, 152, 219, ${0.3 - i * 0.08})`;
                         ctx.lineWidth = 2;
                         ctx.stroke();
                     }
                 }
-                
+
                 // AP icon
                 ctx.beginPath();
-                ctx.arc(ap.x, ap.y, 15, 0, Math.PI * 2);
-                ctx.fillStyle = '#2ecc71';
-                ctx.fill();
-                ctx.strokeStyle = '#27ae60';
-                ctx.lineWidth = 3;
-                ctx.stroke();
-                
-                // Antenna
-                ctx.beginPath();
-                ctx.moveTo(ap.x, ap.y - 15);
-                ctx.lineTo(ap.x, ap.y - 25);
-                ctx.strokeStyle = '#27ae60';
-                ctx.lineWidth = 3;
-                ctx.stroke();
-                
-                ctx.beginPath();
-                ctx.arc(ap.x, ap.y - 25, 3, 0, Math.PI * 2);
-                ctx.fillStyle = '#27ae60';
-                ctx.fill();
+                if (isDir) {
+                    ctx.moveTo(ap.x + Math.cos(ap.direction) * 16, ap.y + Math.sin(ap.direction) * 16);
+                    ctx.lineTo(ap.x + Math.cos(ap.direction + 2.5) * 13, ap.y + Math.sin(ap.direction + 2.5) * 13);
+                    ctx.lineTo(ap.x + Math.cos(ap.direction - 2.5) * 13, ap.y + Math.sin(ap.direction - 2.5) * 13);
+                    ctx.closePath();
+                    ctx.fillStyle = '#3498db';
+                    ctx.fill();
+                    ctx.strokeStyle = '#2980b9';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                } else {
+                    ctx.arc(ap.x, ap.y, 15, 0, Math.PI * 2);
+                    ctx.fillStyle = '#2ecc71';
+                    ctx.fill();
+                    ctx.strokeStyle = '#27ae60';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
             });
             
             updateStats();
@@ -684,6 +767,23 @@
                 const height = Math.abs(currentY - startY);
                 ctx.rect(Math.min(startX, currentX), Math.min(startY, currentY), width, height);
                 ctx.stroke();
+            } else if (currentTool === 'ap-directional') {
+                const angle = Math.atan2(currentY - startY, currentX - startX);
+                const hb = (35 * Math.PI) / 180;
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.arc(startX, startY, 120, angle - hb, angle + hb);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(41, 128, 185, 0.2)';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.strokeStyle = 'rgba(41, 128, 185, 0.9)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.setLineDash([5, 5]);
             } else if (currentTool === 'eraser') {
                 // Show eraser preview circle
                 ctx.beginPath();
@@ -749,7 +849,17 @@
             } else if (currentTool === 'ap') {
                 accessPoints.push({
                     x: startX,
-                    y: startY
+                    y: startY,
+                    type: 'omni'
+                });
+            } else if (currentTool === 'ap-directional') {
+                const dist = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                const dir = dist > 10 ? Math.atan2(endY - startY, endX - startX) : 0;
+                accessPoints.push({
+                    x: startX,
+                    y: startY,
+                    type: 'directional',
+                    direction: dir
                 });
             } else if (currentTool === 'eraser') {
                 isDrawing = false;
